@@ -1,0 +1,15 @@
+[2026-09-22T02:11:04,120][INFO ][o.e.c.s.ClusterApplierService] [es-prod-01] added {{es-prod-02}{node-id-aaaa}{10.20.30.41}{10.20.30.41:9300}{cdfhilmrstw}}
+[2026-09-22T02:11:05,001][WARN ][o.e.x.s.a.AuthenticationService] [es-prod-01] Authentication failed for user [elastic] from [10.20.30.99]
+{"type":"server","cluster.name":"prod-logs","node.name":"es-prod-01","message":"bound_address {10.20.30.41:9200}"}
+Authorization: ApiKey aGhpc2lzYWZha2VhcGlrZXlmb3J0ZXN0
+xpack.security.http.ssl.keystore.secure_password: s3cretKeystore
+cloud.auth: elastic:Sup3rS3cret
+bind_password: LdapBind#99
+email=sre@corp.example.com
+mac=0e:a0:e7:92:3a:a3
+bootstrap.password=Changeme123
+-----BEGIN RSA PRIVATE KEY-----
+MIIEowIBAAKCAQEAfakekeymaterial
+-----END RSA PRIVATE KEY-----
+curl https://elastic:Changeme123@10.20.30.41:9200/_cluster/health
+version remains 8.18.4 and localhost 127.0.0.1
