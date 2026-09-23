@@ -4,6 +4,28 @@ Go rewrite of the Elastic diagnostic / cluster / server log cleaner, using the s
 
 Sibling: [kafka_log_clean](https://github.com/nwlterry/kafka_log_clean).
 
+## Download
+
+Pre-built binaries are on the [Releases](https://github.com/nwlterry/elastic_log_clean/releases) page (`v1.1.0`).
+
+| Archive | Use on |
+|---------|--------|
+| `elastic_log_clean_1.1.0_linux_amd64.tar.gz` | RHEL / most servers |
+| `elastic_log_clean_1.1.0_linux_arm64.tar.gz` | Linux aarch64 |
+| `elastic_log_clean_1.1.0_darwin_amd64.tar.gz` | Intel macOS |
+| `elastic_log_clean_1.1.0_darwin_arm64.tar.gz` | Apple Silicon |
+| `elastic_log_clean_1.1.0_windows_amd64.zip` | Windows |
+
+```bash
+curl -fsSL -O https://github.com/nwlterry/elastic_log_clean/releases/download/v1.1.0/elastic_log_clean_1.1.0_linux_amd64.tar.gz
+tar -xzf elastic_log_clean_1.1.0_linux_amd64.tar.gz
+chmod +x elastic_log_clean
+./elastic_log_clean --version
+./elastic_log_clean -i diagnostics.zip -o scrubbed-diagnostics.zip
+```
+
+Each archive includes the binary plus `elastic_default.yaml` and `elastic_ip_name_map.yaml`.
+
 ## Build
 
 Requires Go 1.22+.
@@ -40,36 +62,7 @@ Default (`type: IP`, `replacementType: Consistent`) assigns tokens:
 
 The `IP` rule has no name map. Pin specific IPs or hostnames with `Keywords`. Keywords run **before** IP, so a mapped address is not tokenized again.
 
-Copy [config/elastic_ip_name_map.yaml](config/elastic_ip_name_map.yaml) and edit the `replacement` maps:
-
-```yaml
-obfuscate:
-  - type: IP
-    replacementType: Consistent
-    target: All
-  - type: Keywords
-    target: FileContents
-    replacement:
-      10.20.30.41: node-a
-      10.20.30.42: node-b
-      es-prod-01: node-a
-      es-prod-02: node-b
-  - type: Keywords
-    target: FilePath
-    replacement:
-      es-prod-01: node-a
-      es-prod-02: node-b
-```
-
-On a line `es-prod-01 10.20.30.41 10.99.1.8`:
-
-| original      | result                |
-|---------------|-----------------------|
-| `es-prod-01`  | `node-a`              |
-| `10.20.30.41` | `node-a`              |
-| `10.99.1.8`   | `x-ipv4-0000000001-x` |
-
-`FilePath` rewrites directory/file names; `FileContents` rewrites log text.
+Copy [config/elastic_ip_name_map.yaml](config/elastic_ip_name_map.yaml) and edit the `replacement` maps.
 
 Do not commit a filled-in map or `report.yaml`.
 
