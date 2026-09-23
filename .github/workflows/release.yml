@@ -38,11 +38,11 @@ jobs:
             Download the archive for your OS/arch, unpack, and run the binary.
 
             ```bash
-            tar -xzf elastic_log_clean_*_linux_amd64.tar.gz
+            tar -xzf elastic_log_clean_1.1.0_linux_amd64.tar.gz
             chmod +x elastic_log_clean
             ./elastic_log_clean --version
             ./elastic_log_clean -i diagnostics.zip -o scrubbed-diagnostics.zip
             ```
 
-            Packed with `config/elastic_default.yaml` and `config/elastic_ip_name_map.yaml`.
-            Do not share a generated `report.yaml`.
+            Packed with elastic_default.yaml and elastic_ip_name_map.yaml.
+            Do not share a generated report.yaml.
