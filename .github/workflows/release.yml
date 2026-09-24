@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Release tag (e.g. v1.1.0)
+        description: Release tag (e.g. v1.2.0)
         required: true
-        default: v1.1.0
+        default: v1.2.0
   push:
     tags:
       - "v*"
@@ -35,14 +35,13 @@ jobs:
           generate_release_notes: true
           files: dist/*
           body: |
-            Download the archive for your OS/arch, unpack, and run the binary.
+            Unpack and run. Windows 11: use elastic_log_clean.ps1 after copying a diagnostics zip or server log off the host.
 
             ```bash
-            tar -xzf elastic_log_clean_1.1.0_linux_amd64.tar.gz
-            chmod +x elastic_log_clean
-            ./elastic_log_clean --version
-            ./elastic_log_clean -i diagnostics.zip -o scrubbed-diagnostics.zip
+            tar -xzf elastic_log_clean_1.2.0_linux_amd64.tar.gz
+            ./elastic_log_clean -v -i diagnostics.zip -o scrubbed-diagnostics.zip
             ```
 
-            Packed with elastic_default.yaml and elastic_ip_name_map.yaml.
-            Do not share a generated report.yaml.
+            ```powershell
+            .\elastic_log_clean.ps1 -InputPath .\local-diagnostics.zip -VerboseLog
+            ```
