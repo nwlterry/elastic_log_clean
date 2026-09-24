@@ -1,5 +1,5 @@
 BIN        := elastic_log_clean
-VERSION    ?= 1.1.0
+VERSION    ?= 1.2.0
 GO         ?= go
 GOFLAGS    ?=
 LDFLAGS    := -s -w -X main.Version=$(VERSION)
