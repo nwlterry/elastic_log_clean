@@ -189,6 +189,7 @@ func (c *Cleaner) replIPv6(v string) string {
 }
 
 func (c *Cleaner) ObfuscateText(text string) string {
+	text = c.redactLDAP(text)
 	if c.enablePEM {
 		text = pemRe.ReplaceAllString(text, "-----BEGIN REDACTED-----\nx-redacted-pem-x\n-----END REDACTED-----")
 	}
