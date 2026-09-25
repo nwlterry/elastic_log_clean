@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Release tag (e.g. v1.2.0)
+        description: Release tag (e.g. v1.2.1)
         required: true
-        default: v1.2.0
+        default: v1.2.1
   push:
     tags:
       - "v*"
@@ -35,13 +35,9 @@ jobs:
           generate_release_notes: true
           files: dist/*
           body: |
-            Unpack and run. Windows 11: use elastic_log_clean.ps1 after copying a diagnostics zip or server log off the host.
+            v1.2.1: do not treat JPMS module@version as email or HH:MM:SS as IPv6.
 
             ```bash
-            tar -xzf elastic_log_clean_1.2.0_linux_amd64.tar.gz
-            ./elastic_log_clean -v -i diagnostics.zip -o scrubbed-diagnostics.zip
-            ```
-
-            ```powershell
-            .\elastic_log_clean.ps1 -InputPath .\local-diagnostics.zip -VerboseLog
+            tar -xzf elastic_log_clean_*_linux_amd64.tar.gz
+            ./elastic_log_clean -i diagnostics.zip -o scrubbed-diagnostics.zip
             ```
