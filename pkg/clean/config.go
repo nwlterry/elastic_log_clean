@@ -74,6 +74,7 @@ func DefaultConfig() Config {
 			{Type: "IP", ReplacementType: "Consistent", Target: "All"},
 			{Type: "MAC", ReplacementType: "Consistent", Target: "All"},
 			{Type: "Email", ReplacementType: "Consistent", Target: "FileContents"},
+			{Type: "LDAP", ReplacementType: "Consistent", Target: "FileContents"},
 			{Type: "Secrets", Enabled: boolPtr(true)},
 			{Type: "PEM", Enabled: boolPtr(true)},
 		},
