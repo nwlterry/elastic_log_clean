@@ -72,3 +72,19 @@ func looksLikeIPv6(v string) bool {
 	ip := net.ParseIP(v)
 	return ip != nil && ip.To4() == nil
 }
+
+type secretPat struct {
+	re   *regexp.Regexp
+	repl string
+}
+
+var defaultSecrets = []secretPat{
+	{regexp.MustCompile(`(?i)(authorization\s*[:=]\s*)(basic|bearer)\s+[A-Za-z0-9+/=._\-]+`), `${1}${2} x-redacted-auth-x`},
+	{regexp.MustCompile(`(?i)(api[_-]?key\s*[:=]\s*)([A-Za-z0-9+/=_\-]{8,})`), `${1}x-redacted-apikey-x`},
+	{regexp.MustCompile(`(?i)(ApiKey\s+)([A-Za-z0-9+/=_\-]{8,})`), `${1}x-redacted-apikey-x`},
+	{regexp.MustCompile(`(?i)((?:password|passwd|secret|token|bind_password|service_token|keystore\.seed|truststore\.password|keystore\.password|xpack\.security\.http\.ssl\.keystore\.secure_password|xpack\.security\.transport\.ssl\.keystore\.secure_password|cloud\.auth|bootstrap\.password)\s*[=:]\s*)([^\s,"'}]+)`), `${1}x-redacted-secret-x`},
+	{regexp.MustCompile(`(?i)("(?:password|passwd|secret|token|api_key|authorization|bind_password)"\s*:\s*")([^"]+)"`), `${1}x-redacted-secret-x"`},
+	{regexp.MustCompile(`(?i)((?:basic\.auth\.user\.info|cloud\.auth)\s*[:=]\s*)(\S+)`), `${1}x-redacted-userinfo-x`},
+	{regexp.MustCompile(`(?i)(://[^:/@\s]+:)([^@/\s]+)(@)`), `${1}x-redacted-secret-x${3}`},
+	{regexp.MustCompile(`\bAKIA[0-9A-Z]{16}\b`), `x-redacted-awskey-x`},
+}
