@@ -1,14 +1,9 @@
 package clean
 
 import (
-	"fmt"
 	"net"
-	"path"
-	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
-	"sync"
 )
 
 var (
@@ -82,31 +77,4 @@ var defaultSecrets = []secretPat{
 	{regexp.MustCompile(`(?i)((?:basic\.auth\.user\.info|cloud\.auth)\s*[:=]\s*)(\S+)`), `${1}x-redacted-userinfo-x`},
 	{regexp.MustCompile(`(?i)(://[^:/@\s]+:)([^@/\s]+)(@)`), `${1}x-redacted-secret-x${3}`},
 	{regexp.MustCompile(`\bAKIA[0-9A-Z]{16}\b`), `x-redacted-awskey-x`},
-}
-
-type Occurrence struct {
-	Original string `yaml:"original"`
-	Count    int    `yaml:"count"`
-}
-
-type Replacement struct {
-	Canonical    string       `yaml:"canonical"`
-	ReplacedWith string       `yaml:"replacedWith"`
-	Occurrences  []Occurrence `yaml:"occurrences"`
-	occ          map[string]int
-}
-
-type MappingStore struct {
-	mu      sync.Mutex
-	maps    map[string]map[string]string
-	counter map[string]int
-	recs    map[string]*Replacement
-}
-
-func NewMappingStore() *MappingStore {
-	return &MappingStore{
-		maps:    map[string]map[string]string{},
-		counter: map[string]int{},
-		recs:    map[string]*Replacement{},
-	}
 }
