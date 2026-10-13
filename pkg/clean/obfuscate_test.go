@@ -43,6 +43,12 @@ func TestSecretsAndPEM(t *testing.T) {
 			t.Fatalf("leaked %q in:\n%s", bad, out)
 		}
 	}
+	if !strings.Contains(out, "x-redacted-secret-x") {
+		t.Fatalf("missing secret token:\n%s", out)
+	}
+	if !strings.Contains(out, "x-redacted-pem-x") {
+		t.Fatalf("missing pem token")
+	}
 }
 
 func TestOmitKeystore(t *testing.T) {
@@ -55,6 +61,126 @@ func TestOmitKeystore(t *testing.T) {
 	}
 	if c.ShouldOmit("logs/prod.log") {
 		t.Fatal("log omitted")
+	}
+}
+
+func TestZipRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "diag.zip")
+	zf, err := os.Create(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := zip.NewWriter(zf)
+	f, _ := w.Create("logs/elasticsearch.log")
+	_, _ = f.Write([]byte("node 10.1.2.3 password=abc123\n"))
+	f2, _ := w.Create("certs/http.p12")
+	_, _ = f2.Write([]byte{0, 1, 2})
+	_ = w.Close()
+	_ = zf.Close()
+
+	c := NewCleaner(DefaultConfig(), nil)
+	srcRoot := filepath.Join(dir, "src")
+	dstRoot := filepath.Join(dir, "dst")
+	if _, err := ExtractZip(src, srcRoot); err != nil {
+		t.Fatal(err)
+	}
+	if err := ProcessTree(c, srcRoot, dstRoot, 1); err != nil {
+		t.Fatal(err)
+	}
+	outZip := filepath.Join(dir, "out.zip")
+	if err := WriteZip(dstRoot, outZip); err != nil {
+		t.Fatal(err)
+	}
+	r, err := zip.OpenReader(outZip)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	var sawLog, sawP12 bool
+	for _, f := range r.File {
+		if strings.HasSuffix(f.Name, ".p12") {
+			sawP12 = true
+		}
+		if strings.HasSuffix(f.Name, "elasticsearch.log") {
+			sawLog = true
+			rc, _ := f.Open()
+			b, _ := io.ReadAll(rc)
+			_ = rc.Close()
+			body := string(b)
+			if strings.Contains(body, "10.1.2.3") || strings.Contains(body, "abc123") {
+				t.Fatalf("leaked in zip: %s", body)
+			}
+		}
+	}
+	if !sawLog {
+		t.Fatal("log missing from zip")
+	}
+	if sawP12 {
+		t.Fatal("p12 should be omitted")
+	}
+}
+
+func TestLDAPDNAndSearchFilter(t *testing.T) {
+	c := NewCleaner(DefaultConfig(), nil)
+	in := `bind_dn: CN=es-bind,OU=Service Accounts,DC=corp,DC=example,DC=com search (sAMAccountName=terryng) user_search.base_dn=OU=Users,DC=corp,DC=example,DC=com`
+	out := c.ObfuscateText(in)
+	for _, leak := range []string{
+		"CN=es-bind,OU=Service Accounts,DC=corp,DC=example,DC=com",
+		"sAMAccountName=terryng",
+		"OU=Users,DC=corp,DC=example,DC=com",
+		"terryng",
+	} {
+		if strings.Contains(out, leak) {
+			t.Fatalf("ldap leaked %q in:\n%s", leak, out)
+		}
+	}
+	if !strings.Contains(out, "x-ldapdn-") {
+		t.Fatalf("missing ldap dn token:\n%s", out)
+	}
+	if !strings.Contains(out, "x-ldapsearch-") {
+		t.Fatalf("missing ldap search token:\n%s", out)
+	}
+}
+
+func TestLDAPFullDNWithSpacesAndTrailingBraces(t *testing.T) {
+	c := NewCleaner(DefaultConfig(), nil)
+	in := `bind_dn: CN=es-bind,OU=Service Accounts,DC=corp,DC=example,DC=com}} user_search.base_dn=OU=Users,DC=corp,DC=example,DC=com search (sAMAccountName=terryng)`
+	out := c.ObfuscateText(in)
+	for _, leak := range []string{
+		"CN=es-bind,OU=Service Accounts,DC=corp,DC=example,DC=com",
+		"OU=Service Accounts",
+		"DC=corp,DC=example,DC=com",
+		"OU=Users,DC=corp,DC=example,DC=com",
+		"terryng",
+		"}}",
+	} {
+		if strings.Contains(out, leak) {
+			t.Fatalf("ldap leaked %q in:\n%s", leak, out)
+		}
+	}
+	if !strings.Contains(out, "x-ldapdn-") {
+		t.Fatalf("missing ldap dn token:\n%s", out)
+	}
+	// report must store the full original including trailing }}
+	reps := c.Store.Report()
+	var sawFull bool
+	for _, r := range reps {
+		if r.Canonical == "" {
+			continue
+		}
+		for _, oc := range r.Occurrences {
+			if strings.Contains(oc.Original, "ou=service accounts") && strings.Contains(oc.Original, "dc=com}}") {
+				sawFull = true
+			}
+			// must not be a truncated OU-only or CN-only original for this DN
+			if oc.Original == "ou=service" || oc.Original == "cn=es-bind" {
+				t.Fatalf("truncated original stored: %q", oc.Original)
+			}
+		}
+	}
+	if !sawFull {
+		t.Fatalf("report missing full DN with trailing }}:\n%#v", reps)
 	}
 }
 
@@ -83,5 +209,28 @@ func TestModuleCoordNotEmailAndClockNotIPv6(t *testing.T) {
 	}
 	if !strings.Contains(out, "x-ipv6-") && !strings.Contains(out, "x:x:x") {
 		t.Fatalf("missing ipv6 token:\n%s", out)
+	}
+}
+
+func TestCertSubjectSeparateFromLDAPDN(t *testing.T) {
+	c := NewCleaner(DefaultConfig(), nil)
+	in := `subject=CN=es-node-01,O=Elastic,C=US issuer=CN=Corp-CA,O=Elastic,C=US bind_dn: CN=es-bind,OU=Service Accounts,DC=corp,DC=example,DC=com openssl /C=US/O=Elastic/CN=es-node-01`
+	out := c.ObfuscateText(in)
+	for _, leak := range []string{"CN=es-node-01,O=Elastic,C=US", "CN=Corp-CA,O=Elastic,C=US", "CN=es-bind,OU=Service Accounts,DC=corp,DC=example,DC=com", "/C=US/O=Elastic/CN=es-node-01"} {
+		if strings.Contains(out, leak) {
+			t.Fatalf("dn leaked %q in:\n%s", leak, out)
+		}
+	}
+	if !strings.Contains(out, "x-certsubj-") {
+		t.Fatalf("missing cert token:\n%s", out)
+	}
+	if !strings.Contains(out, "x-ldapdn-") {
+		t.Fatalf("missing ldap token:\n%s", out)
+	}
+	if strings.Contains(out, "subject=x-ldapdn-") {
+		t.Fatalf("cert subject classified as ldap:\n%s", out)
+	}
+	if strings.Contains(out, "bind_dn: x-certsubj-") {
+		t.Fatalf("ldap bind classified as cert:\n%s", out)
 	}
 }
