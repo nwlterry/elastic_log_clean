@@ -184,6 +184,31 @@ func TestLDAPFullDNWithSpacesAndTrailingBraces(t *testing.T) {
 	}
 }
 
+func TestRedactedSecretTokenNotEmail(t *testing.T) {
+	c := NewCleaner(DefaultConfig(), nil)
+	in := `http://es-user:s3cret@cluster.example.com:9200 password=hunter2 sre@corp.example.com`
+	out := c.ObfuscateText(in)
+	if strings.Contains(out, "s3cret") {
+		t.Fatalf("url password leaked:\n%s", out)
+	}
+	if strings.Contains(out, "hunter2") {
+		t.Fatalf("password leaked:\n%s", out)
+	}
+	if strings.Contains(out, "sre@corp.example.com") {
+		t.Fatalf("real email not redacted:\n%s", out)
+	}
+	// URL userinfo leaves x-redacted-secret-x@host — must not become an email token.
+	if !strings.Contains(out, "x-redacted-secret-x@cluster.example.com") {
+		t.Fatalf("secret token should remain before @host, got:\n%s", out)
+	}
+	if strings.Contains(out, "x-email-") && !strings.Contains(out, "x-redacted-secret-x@cluster.example.com") {
+		t.Fatalf("redacted secret token reclassified as email:\n%s", out)
+	}
+	if !strings.Contains(out, "x-email-") {
+		t.Fatalf("real email token missing:\n%s", out)
+	}
+}
+
 func TestModuleCoordNotEmailAndClockNotIPv6(t *testing.T) {
 	c := NewCleaner(DefaultConfig(), nil)
 	in := `[2026-09-24T07:29:19,123][INFO] loaded io.netty.transport@4.1.135.Final org.elasticsearch.server@8.18.4 "07:29:19" user sre@corp.example.com ipv6 2001:db8::1`
