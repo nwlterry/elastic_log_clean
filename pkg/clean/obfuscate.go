@@ -20,6 +20,8 @@ var (
 	moduleVerRe = regexp.MustCompile(`(?i)^\d+\.\d+`)
 	// LDAP search filter attribute=value inside (...).
 	ldapFilterRe = regexp.MustCompile(`(?i)(\((?:cn|uid|sAMAccountName|userPrincipalName|mail|memberOf|member|distinguishedName)\s*=\s*)([^)\\]+)(\))`)
+	// Kafka ACL / authorizer principal: User:alice or User:first_name.last_name
+	userPrincipalRe = regexp.MustCompile(`(?i)\b(user)\s*:\s*([A-Za-z][A-Za-z0-9._\-]{0,200})`)
 )
 
 var nonMailTLDs = map[string]struct{}{
