@@ -145,7 +145,20 @@ func ProcessTree(c *Cleaner, src, dst string, workers int) error {
 				mu.Unlock()
 				return
 			}
-			cleaned := ProcessBytes(c, data, filepath.Base(f))
+			var cleaned []byte
+			if IsMultiArchive(filepath.Base(f)) {
+				cleaned, err = processNestedArchive(c, data, filepath.Base(f), workers)
+				if err != nil {
+					mu.Lock()
+					if first == nil {
+						first = err
+					}
+					mu.Unlock()
+					return
+				}
+			} else {
+				cleaned = ProcessBytes(c, data, filepath.Base(f))
+			}
 			if err := os.WriteFile(target, cleaned, 0o644); err != nil {
 				mu.Lock()
 				if first == nil {
@@ -160,6 +173,35 @@ func ProcessTree(c *Cleaner, src, dst string, workers int) error {
 	}
 	wg.Wait()
 	return first
+}
+
+// processNestedArchive expands a zip/tar/tar.gz found inside the tree, cleans
+// its contents, and re-packs the same archive type.
+func processNestedArchive(c *Cleaner, data []byte, name string, workers int) ([]byte, error) {
+	tmp, err := os.MkdirTemp("", "logclean-nested-*")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(tmp)
+	src := filepath.Join(tmp, "src")
+	dst := filepath.Join(tmp, "dst")
+	inFile := filepath.Join(tmp, name)
+	if err := os.WriteFile(inFile, data, 0o644); err != nil {
+		return nil, err
+	}
+	n, err := ExtractArchive(inFile, src)
+	if err != nil {
+		return nil, err
+	}
+	Logf("extract nested %s (%d files)", name, n)
+	if err := ProcessTree(c, src, dst, workers); err != nil {
+		return nil, err
+	}
+	outFile := filepath.Join(tmp, "out-"+name)
+	if err := WriteArchive(dst, outFile); err != nil {
+		return nil, err
+	}
+	return os.ReadFile(outFile)
 }
 
 func ExtractZip(archive, dest string) (int, error) {
