@@ -209,6 +209,54 @@ func TestRedactedSecretTokenNotEmail(t *testing.T) {
 	}
 }
 
+func TestUserPrincipalFirstLast(t *testing.T) {
+	c := NewCleaner(DefaultConfig(), nil)
+	in := `Principal = User:first_name.last_name is Allowed Operation = Read from host = 10.1.2.3 User:alice super.users=User:bob.smith`
+	out := c.ObfuscateText(in)
+	for _, leak := range []string{"first_name.last_name", "alice", "bob.smith"} {
+		if strings.Contains(out, leak) {
+			t.Fatalf("user leaked %q in:\n%s", leak, out)
+		}
+	}
+	if !strings.Contains(out, "x-user-") {
+		t.Fatalf("missing user token:\n%s", out)
+	}
+	if !strings.Contains(out, "User:") && !strings.Contains(out, "user:") {
+		t.Fatalf("User: prefix dropped:\n%s", out)
+	}
+}
+
+func TestArchiveRoundTripTarGz(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	if err := os.MkdirAll(filepath.Join(src, "logs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "Principal = User:first_name.last_name host 10.9.8.7\n"
+	if err := os.WriteFile(filepath.Join(src, "logs", "authorizer.log"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	archive := filepath.Join(dir, "support.tar.gz")
+	if err := WriteArchive(src, archive); err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(dir, "dst")
+	n, err := ExtractArchive(archive, dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("extract count %d", n)
+	}
+	got, err := os.ReadFile(filepath.Join(dst, "logs", "authorizer.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != body {
+		t.Fatalf("round trip mismatch: %q", got)
+	}
+}
+
 func TestModuleCoordNotEmailAndClockNotIPv6(t *testing.T) {
 	c := NewCleaner(DefaultConfig(), nil)
 	in := `[2026-09-24T07:29:19,123][INFO] loaded io.netty.transport@4.1.135.Final org.elasticsearch.server@8.18.4 "07:29:19" user sre@corp.example.com ipv6 2001:db8::1`
