@@ -100,17 +100,19 @@ func ProcessTree(c *Cleaner, src, dst string, workers int) error {
 	if workers < 1 {
 		workers = 1
 	}
-	sem := make(chan struct{}, workers)
+	if workers > len(files) && len(files) > 0 {
+		workers = len(files)
+	}
+
+	jobs := make(chan string)
 	var wg sync.WaitGroup
 	var first error
 	var mu sync.Mutex
-	for _, f := range files {
-		f := f
-		wg.Add(1)
-		sem <- struct{}{}
-		go func() {
-			defer wg.Done()
-			defer func() { <-sem }()
+	var done int
+
+	worker := func() {
+		defer wg.Done()
+		for f := range jobs {
 			rel, err := filepath.Rel(src, f)
 			if err != nil {
 				mu.Lock()
@@ -118,14 +120,15 @@ func ProcessTree(c *Cleaner, src, dst string, workers int) error {
 					first = err
 				}
 				mu.Unlock()
-				return
+				continue
 			}
 			rel = filepath.ToSlash(rel)
 			if c.ShouldOmit(rel) {
 				c.AddOmitted(rel)
 				Logf("omit   %s", rel)
-				return
+				continue
 			}
+			Logf("start  %s", rel)
 			data, err := os.ReadFile(f)
 			if err != nil {
 				mu.Lock()
@@ -133,7 +136,7 @@ func ProcessTree(c *Cleaner, src, dst string, workers int) error {
 					first = err
 				}
 				mu.Unlock()
-				return
+				continue
 			}
 			outRel := c.ObfuscatePath(rel)
 			target := filepath.Join(dst, filepath.FromSlash(outRel))
@@ -143,18 +146,21 @@ func ProcessTree(c *Cleaner, src, dst string, workers int) error {
 					first = err
 				}
 				mu.Unlock()
-				return
+				continue
 			}
 			var cleaned []byte
 			if IsMultiArchive(filepath.Base(f)) {
-				cleaned, err = processNestedArchive(c, data, filepath.Base(f), workers)
+				// Nested expand/scan/repack runs inline on this worker.
+				// Do not open another worker pool — that fills every slot
+				// and the outer pool never advances past the first N archives.
+				cleaned, err = processNestedArchive(c, data, filepath.Base(f))
 				if err != nil {
 					mu.Lock()
 					if first == nil {
 						first = err
 					}
 					mu.Unlock()
-					return
+					continue
 				}
 			} else {
 				cleaned = ProcessBytes(c, data, filepath.Base(f))
@@ -165,19 +171,32 @@ func ProcessTree(c *Cleaner, src, dst string, workers int) error {
 					first = err
 				}
 				mu.Unlock()
-				return
+				continue
 			}
 			c.AddProcessed()
-			Logf("clean  %s -> %s (%d bytes)", rel, outRel, len(cleaned))
-		}()
+			mu.Lock()
+			done++
+			n := done
+			mu.Unlock()
+			Logf("clean  %s -> %s (%d bytes) [%d/%d]", rel, outRel, len(cleaned), n, len(files))
+		}
 	}
+
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		go worker()
+	}
+	for _, f := range files {
+		jobs <- f
+	}
+	close(jobs)
 	wg.Wait()
 	return first
 }
 
 // processNestedArchive expands a zip/tar/tar.gz found inside the tree, cleans
-// its contents, and re-packs the same archive type.
-func processNestedArchive(c *Cleaner, data []byte, name string, workers int) ([]byte, error) {
+// its contents on this same worker (no extra pool), and re-packs.
+func processNestedArchive(c *Cleaner, data []byte, name string) ([]byte, error) {
 	tmp, err := os.MkdirTemp("", "logclean-nested-*")
 	if err != nil {
 		return nil, err
@@ -194,7 +213,7 @@ func processNestedArchive(c *Cleaner, data []byte, name string, workers int) ([]
 		return nil, err
 	}
 	Logf("extract nested %s (%d files)", name, n)
-	if err := ProcessTree(c, src, dst, workers); err != nil {
+	if err := ProcessTree(c, src, dst, 1); err != nil {
 		return nil, err
 	}
 	outFile := filepath.Join(tmp, "out-"+name)
